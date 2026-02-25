@@ -3,12 +3,41 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objs as go
-from ta.momentum import RSIIndicator
-from ta.trend import MACD
 from sklearn.linear_model import LinearRegression
 
 st.set_page_config(page_title="TradePro Quant", layout="wide")
 st.title("📈 TradePro Quant - AI Trading Dashboard")
+
+# -------------------------------
+# ==========================
+# CUSTOM RSI FUNCTION
+# ==========================
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+# ==========================
+# CUSTOM MACD FUNCTION
+# ==========================
+def calculate_macd(series):
+    ema12 = series.ewm(span=12, adjust=False).mean()
+    ema26 = series.ewm(span=26, adjust=False).mean()
+
+    macd = ema12 - ema26
+    signal = macd.ewm(span=9, adjust=False).mean()
+
+    return macd, signal
+# --------------------------------------------
 
 # ==========================
 # SIDEBAR FILTERS
@@ -255,3 +284,4 @@ for stock in stocks:
     )
 
 st.plotly_chart(comparison_fig, use_container_width=True)
+

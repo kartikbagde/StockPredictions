@@ -146,47 +146,44 @@ backtest_fig.add_trace(go.Scatter(x=data.index, y=data["Portfolio"], name="Strat
 st.plotly_chart(backtest_fig, use_container_width=True)
 
 # ==========================
-# LSTM FORECAST
+# 7-Day Forecast (Lightweight)
 # ==========================
-st.subheader("🤖 7-Day LSTM Forecast")
-df = data[["Close"]].dropna()
+st.subheader("🤖 7-Day AI Forecast")
 
-if len(df) > 60:
-    close_values = df["Close"].values.reshape(-1,1)
-    scaler = MinMaxScaler(feature_range=(0,1))
-    scaled_data = scaler.fit_transform(close_values)
+from sklearn.linear_model import LinearRegression
 
-    X, y = [], []
-    for i in range(60, len(scaled_data)):
-        X.append(scaled_data[i-60:i,0])
-        y.append(scaled_data[i,0])
-    X, y = np.array(X), np.array(y)
-    X = X.reshape(X.shape[0], X.shape[1], 1)
+df = data[["Close"]].dropna().reset_index()
+df["Day"] = np.arange(len(df))
 
-    model = Sequential()
-    model.add(LSTM(50, return_sequences=True, input_shape=(60,1)))
-    model.add(LSTM(50))
-    model.add(Dense(1))
-    model.compile(optimizer='adam', loss='mse')
-    model.fit(X, y, epochs=5, verbose=0)
+X = df[["Day"]]
+y = df["Close"]
 
-    last_60 = scaled_data[-60:].reshape(1,60,1)
-    future_scaled = []
+model = LinearRegression()
+model.fit(X, y)
 
-    for _ in range(7):
-        pred = model.predict(last_60, verbose=0)[0][0]
-        future_scaled.append(pred)
-        last_60 = np.append(last_60[:,1:,:], [[[pred]]], axis=1)
+future_days = np.arange(len(df), len(df) + 7).reshape(-1, 1)
+future_preds = model.predict(future_days)
 
-    future_scaled = np.array(future_scaled).reshape(-1,1)
-    future_preds = scaler.inverse_transform(future_scaled)
-    future_dates = pd.date_range(start=df.index[-1] + timedelta(days=1), periods=7)
+future_dates = pd.date_range(
+    start=df["Date"].iloc[-1] + pd.Timedelta(days=1),
+    periods=7
+)
 
-    lstm_fig = go.Figure()
-    lstm_fig.add_trace(go.Scatter(x=df.index, y=df["Close"], name="Historical"))
-    lstm_fig.add_trace(go.Scatter(x=future_dates, y=future_preds.flatten(), name="LSTM Forecast", line=dict(dash="dash")))
-    st.plotly_chart(lstm_fig, use_container_width=True)
+forecast_fig = go.Figure()
+forecast_fig.add_trace(go.Scatter(
+    x=df["Date"],
+    y=df["Close"],
+    name="Historical"
+))
 
+forecast_fig.add_trace(go.Scatter(
+    x=future_dates,
+    y=future_preds,
+    name="Forecast",
+    line=dict(dash="dash")
+))
+
+st.plotly_chart(forecast_fig, use_container_width=True)
     # Portfolio Simulator
     st.subheader("💼 Portfolio Simulator")
     investment = st.number_input("Enter Investment Amount", min_value=0.0)
@@ -246,3 +243,4 @@ for stock in stocks:
 
 
 st.plotly_chart(comparison_fig, use_container_width=True)
+

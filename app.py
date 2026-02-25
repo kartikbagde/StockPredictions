@@ -74,17 +74,17 @@ st.metric("💰 Live Price", f"₹ {round(latest_price,2)}")
 # ==========================
 # TECHNICAL INDICATORS
 # ==========================
+
 close_series = data["Close"].astype(float)
 
 data["MA50"] = close_series.rolling(50).mean()
 data["MA200"] = close_series.rolling(200).mean()
 
-rsi_indicator = RSIIndicator(close=close_series, window=14)
-data["RSI"] = rsi_indicator.rsi()
+# Custom RSI
+data["RSI"] = calculate_rsi(close_series)
 
-macd_indicator = MACD(close=close_series)
-data["MACD"] = macd_indicator.macd()
-data["MACD_SIGNAL"] = macd_indicator.macd_signal()
+# Custom MACD
+data["MACD"], data["MACD_SIGNAL"] = calculate_macd(close_series)
 
 # ==========================
 # CANDLESTICK CHART
@@ -284,4 +284,5 @@ for stock in stocks:
     )
 
 st.plotly_chart(comparison_fig, use_container_width=True)
+
 

@@ -5,53 +5,51 @@ import numpy as np
 import plotly.graph_objs as go
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
-from sklearn.preprocessing import MinMaxScaler
-from datetime import timedelta
+from sklearn.linear_model import LinearRegression
 
 st.set_page_config(page_title="TradePro Quant", layout="wide")
-st.title("📈 TradePro Quant - AI Trading Platform")
+st.title("📈 TradePro Quant - AI Trading Dashboard")
 
 # ==========================
-# SIDEBAR
+# SIDEBAR FILTERS
 # ==========================
-st.sidebar.header("Main Stock")
-ticker = st.sidebar.text_input("Enter Stock Symbol", "RELIANCE")
-if "." not in ticker:
-    ticker = ticker.upper() + ".NS"
+st.sidebar.header("🔎 Stock Filters")
+
+ticker_input = st.sidebar.text_input("Enter Stock Symbol", "RELIANCE")
 period = st.sidebar.selectbox("Select Time Period", ["6mo", "1y", "2y"])
-
-st.sidebar.header("Multi-Stock LSTM Comparison")
 compare_input = st.sidebar.text_input(
-    "Enter stocks separated by comma", "RELIANCE,TCS,INFY"
+    "Compare Multiple Stocks (comma separated)",
+    "RELIANCE,TCS,INFY"
 )
+
+# Ensure NSE format
+ticker = ticker_input.strip().upper()
+if "." not in ticker:
+    ticker = ticker + ".NS"
 
 # ==========================
 # DOWNLOAD DATA
 # ==========================
 data = yf.download(ticker, period=period)
+
 if data.empty:
-    st.error("Invalid Stock Symbol ❌")
+    st.error("❌ Invalid stock symbol or no data available.")
     st.stop()
 
+data = data.dropna()
+
 latest_price = float(data["Close"].iloc[-1])
-st.subheader(f"💰 Live Price: ₹ {round(latest_price,2)}")
+
+st.metric("💰 Live Price", f"₹ {round(latest_price,2)}")
 
 # ==========================
-# INDICATORS
+# TECHNICAL INDICATORS
 # ==========================
-
-# Ensure Close column is 1D numeric Series
-if isinstance(data["Close"], pd.DataFrame):
-    close_series = data["Close"].iloc[:,0]  # take first column
-else:
-    close_series = data["Close"]
-
-close_series = pd.to_numeric(close_series, errors="coerce").dropna()
+close_series = data["Close"].astype(float)
 
 data["MA50"] = close_series.rolling(50).mean()
 data["MA200"] = close_series.rolling(200).mean()
 
-# RSI & MACD
 rsi_indicator = RSIIndicator(close=close_series, window=14)
 data["RSI"] = rsi_indicator.rsi()
 
@@ -63,7 +61,9 @@ data["MACD_SIGNAL"] = macd_indicator.macd_signal()
 # CANDLESTICK CHART
 # ==========================
 st.subheader("📊 Candlestick Chart")
+
 fig = go.Figure()
+
 fig.add_trace(go.Candlestick(
     x=data.index,
     open=data["Open"],
@@ -72,43 +72,61 @@ fig.add_trace(go.Candlestick(
     close=data["Close"],
     name="Candlestick"
 ))
+
 fig.add_trace(go.Scatter(x=data.index, y=data["MA50"], name="50 DMA"))
 fig.add_trace(go.Scatter(x=data.index, y=data["MA200"], name="200 DMA"))
+
 fig.update_layout(height=600, xaxis_rangeslider_visible=False)
+
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================
 # RSI
 # ==========================
 st.subheader("📉 RSI")
+
 rsi_fig = go.Figure()
 rsi_fig.add_trace(go.Scatter(x=data.index, y=data["RSI"], name="RSI"))
 rsi_fig.add_hline(y=70)
 rsi_fig.add_hline(y=30)
-rsi_fig.update_layout(height=300)
+
 st.plotly_chart(rsi_fig, use_container_width=True)
 
 # ==========================
 # MACD
 # ==========================
 st.subheader("📊 MACD")
+
 macd_fig = go.Figure()
 macd_fig.add_trace(go.Scatter(x=data.index, y=data["MACD"], name="MACD"))
 macd_fig.add_trace(go.Scatter(x=data.index, y=data["MACD_SIGNAL"], name="Signal"))
-macd_fig.update_layout(height=300)
+
 st.plotly_chart(macd_fig, use_container_width=True)
 
 # ==========================
 # SIGNAL GENERATOR
 # ==========================
 st.subheader("📢 Trading Signal")
+
 data["Signal"] = 0
-buy_condition = (data["RSI"] < 30) & (data["MACD"] > data["MACD_SIGNAL"]) & (data["MA50"] > data["MA200"])
-sell_condition = (data["RSI"] > 70) & (data["MACD"] < data["MACD_SIGNAL"]) & (data["MA50"] < data["MA200"])
+
+buy_condition = (
+    (data["RSI"] < 30) &
+    (data["MACD"] > data["MACD_SIGNAL"]) &
+    (data["MA50"] > data["MA200"])
+)
+
+sell_condition = (
+    (data["RSI"] > 70) &
+    (data["MACD"] < data["MACD_SIGNAL"]) &
+    (data["MA50"] < data["MA200"])
+)
+
 data.loc[buy_condition, "Signal"] = 1
 data.loc[sell_condition, "Signal"] = -1
 
 latest_signal = data["Signal"].iloc[-1]
+
 if latest_signal == 1:
     st.success("🟢 BUY Signal")
 elif latest_signal == -1:
@@ -120,6 +138,7 @@ else:
 # BACKTESTING
 # ==========================
 st.subheader("📈 Backtesting Strategy")
+
 initial_capital = 100000
 cash = initial_capital
 shares = 0
@@ -132,25 +151,28 @@ for i in range(len(data)):
     elif data["Signal"].iloc[i] == -1 and shares > 0:
         cash = shares * data["Close"].iloc[i]
         shares = 0
+
     portfolio_values.append(cash + shares * data["Close"].iloc[i])
 
 data["Portfolio"] = portfolio_values
-profit = portfolio_values[-1] - initial_capital
+
+final_value = portfolio_values[-1]
+profit = final_value - initial_capital
 roi = (profit / initial_capital) * 100
-st.write(f"Final Portfolio Value: ₹ {round(portfolio_values[-1],2)}")
-st.write(f"Total Profit: ₹ {round(profit,2)}")
-st.write(f"ROI: {round(roi,2)} %")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Final Portfolio Value", f"₹ {round(final_value,2)}")
+col2.metric("Total Profit", f"₹ {round(profit,2)}")
+col3.metric("ROI", f"{round(roi,2)} %")
 
 backtest_fig = go.Figure()
 backtest_fig.add_trace(go.Scatter(x=data.index, y=data["Portfolio"], name="Strategy Growth"))
 st.plotly_chart(backtest_fig, use_container_width=True)
 
 # ==========================
-# 7-Day Forecast (Lightweight)
+# 7-DAY FORECAST (Lightweight)
 # ==========================
 st.subheader("🤖 7-Day AI Forecast")
-
-from sklearn.linear_model import LinearRegression
 
 df = data[["Close"]].dropna().reset_index()
 df["Day"] = np.arange(len(df))
@@ -170,12 +192,7 @@ future_dates = pd.date_range(
 )
 
 forecast_fig = go.Figure()
-forecast_fig.add_trace(go.Scatter(
-    x=df["Date"],
-    y=df["Close"],
-    name="Historical"
-))
-
+forecast_fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], name="Historical"))
 forecast_fig.add_trace(go.Scatter(
     x=future_dates,
     y=future_preds,
@@ -184,63 +201,57 @@ forecast_fig.add_trace(go.Scatter(
 ))
 
 st.plotly_chart(forecast_fig, use_container_width=True)
-    # Portfolio Simulator
-    st.subheader("💼 Portfolio Simulator")
-    investment = st.number_input("Enter Investment Amount", min_value=0.0)
-    if investment > 0:
-        shares = investment / latest_price
-        projected_value = shares * future_preds[-1][0]
-        profit = projected_value - investment
-        st.success(f"Projected Value After 7 Days: ₹ {round(projected_value,2)}")
-        if profit > 0:
-            st.markdown(f"🟢 Expected Profit: ₹ {round(profit,2)}")
-        else:
-            st.markdown(f"🔴 Expected Loss: ₹ {round(profit,2)}")
 
 # ==========================
-# MULTI-STOCK LSTM COMPARISON
+# PORTFOLIO SIMULATOR
 # ==========================
-st.subheader("📊 Multi-Stock 7-Day LSTM Comparison")
+st.subheader("💼 Portfolio Simulator")
+
+investment = st.number_input("Enter Investment Amount", min_value=0.0)
+
+if investment > 0:
+    shares = investment / latest_price
+    projected_value = shares * future_preds[-1]
+    profit = projected_value - investment
+
+    st.metric("Projected Value (7 Days)", f"₹ {round(projected_value,2)}")
+
+    if profit > 0:
+        st.success(f"🟢 Expected Profit: ₹ {round(profit,2)}")
+    else:
+        st.error(f"🔴 Expected Loss: ₹ {round(profit,2)}")
+
+# ==========================
+# MULTI-STOCK COMPARISON
+# ==========================
+st.subheader("📊 Multi-Stock 7-Day Forecast Comparison")
+
 stocks = [s.strip().upper() for s in compare_input.split(",")]
 comparison_fig = go.Figure()
 
 for stock in stocks:
     if "." not in stock:
         stock = stock + ".NS"
+
     stock_data = yf.download(stock, period="6mo")
-    if len(stock_data) < 60:
+
+    if stock_data.empty:
         continue
-    df_stock = stock_data[["Close"]].dropna()
-    close_values = df_stock["Close"].values.reshape(-1,1)
-    scaler = MinMaxScaler(feature_range=(0,1))
-    scaled = scaler.fit_transform(close_values)
 
-    X_stock, y_stock = [], []
-    for i in range(60, len(scaled)):
-        X_stock.append(scaled[i-60:i,0])
-        y_stock.append(scaled[i,0])
-    X_stock, y_stock = np.array(X_stock), np.array(y_stock)
-    X_stock = X_stock.reshape(X_stock.shape[0], X_stock.shape[1], 1)
+    df_stock = stock_data[["Close"]].dropna().reset_index()
+    df_stock["Day"] = np.arange(len(df_stock))
 
-    model_stock = Sequential()
-    model_stock.add(LSTM(50, return_sequences=True, input_shape=(60,1)))
-    model_stock.add(LSTM(50))
-    model_stock.add(Dense(1))
-    model_stock.compile(optimizer='adam', loss='mse')
-    model_stock.fit(X_stock, y_stock, epochs=3, verbose=0)
+    X_stock = df_stock[["Day"]]
+    y_stock = df_stock["Close"]
 
-    last_60 = scaled[-60:].reshape(1,60,1)
-    future_scaled = []
-    for _ in range(7):
-        pred = model_stock.predict(last_60, verbose=0)[0][0]
-        future_scaled.append(pred)
-        last_60 = np.append(last_60[:,1:,:], [[[pred]]], axis=1)
+    model_stock = LinearRegression()
+    model_stock.fit(X_stock, y_stock)
 
-    future_scaled = np.array(future_scaled).reshape(-1,1)
-    future_preds = scaler.inverse_transform(future_scaled)
+    future_days_stock = np.arange(len(df_stock), len(df_stock) + 7).reshape(-1, 1)
+    future_preds_stock = model_stock.predict(future_days_stock)
 
-    comparison_fig.add_trace(go.Scatter(y=future_preds.flatten(), name=stock))
-
+    comparison_fig.add_trace(
+        go.Scatter(y=future_preds_stock, name=stock)
+    )
 
 st.plotly_chart(comparison_fig, use_container_width=True)
-

@@ -6,8 +6,6 @@ import plotly.graph_objs as go
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
 from datetime import timedelta
 
 st.set_page_config(page_title="TradePro Quant", layout="wide")
@@ -245,5 +243,6 @@ for stock in stocks:
     future_preds = scaler.inverse_transform(future_scaled)
 
     comparison_fig.add_trace(go.Scatter(y=future_preds.flatten(), name=stock))
+
 
 st.plotly_chart(comparison_fig, use_container_width=True)

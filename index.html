@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TradePro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f1f5f9;
+        }
+
+        .navbar {
+            background: white;
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .brand {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff5722;
+        }
+
+        .live-price {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .container {
+            width: 95%;
+            margin: auto;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        input {
+            padding: 10px;
+            width: 250px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        button {
+            padding: 10px 15px;
+            background: #ff5722;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="navbar">
+    <div class="brand">TradePro</div>
+    <div class="live-price">
+        {{ ticker }} ₹ <span id="livePrice">{{ live_price }}</span>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="card">
+        <form method="POST">
+            <input type="text" name="ticker" placeholder="Enter Ticker (e.g. TCS.NS)">
+            <button type="submit">Load</button>
+        </form>
+    </div>
+
+    <div class="card">
+        {{ chart|safe }}
+    </div>
+
+    <div class="card">
+        {{ forecast_chart|safe }}
+    </div>
+
+</div>
+
+<script>
+    function updatePrice() {
+        fetch("/live_price/{{ ticker }}")
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("livePrice").innerText = data.price;
+            });
+    }
+
+    setInterval(updatePrice, 10000);
+</script>
+
+</body>
+</html>
